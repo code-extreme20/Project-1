@@ -16,11 +16,24 @@ function App() {
     : 0;
 
   // ------------------------------------
+  // API URL
+  // ------------------------------------
+
+  const API_URL = import.meta.env.DEV
+    ? "http://localhost:5000/api/tts"
+    : "/api/tts";
+
+  // ------------------------------------
   // GENERATE SPEECH
   // ------------------------------------
 
   const handleGenerate = async () => {
     setError("");
+
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+
     setAudioUrl("");
 
     if (!text.trim()) {
@@ -29,14 +42,16 @@ function App() {
     }
 
     if (text.length > maxCharacters) {
-      setError(`Text cannot exceed ${maxCharacters} characters.`);
+      setError(
+        `Text cannot exceed ${maxCharacters} characters.`
+      );
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/tts", {
+      const response = await fetch(API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -52,50 +67,64 @@ function App() {
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Failed to generate speech."
-        );
-      }
-
-      if (!data.audioBase64) {
-        throw new Error(
-          "Audio was not returned by the server."
+          data.message ||
+            "Failed to generate speech."
         );
       }
 
       // ------------------------------------
-      // BASE64 → MP3 BLOB
+      // VERCEL RESPONSE
       // ------------------------------------
 
-      const byteCharacters = atob(data.audioBase64);
+      if (data.audioBase64) {
+        const byteCharacters = atob(
+          data.audioBase64
+        );
 
-      const byteNumbers = new Array(
-        byteCharacters.length
-      );
+        const byteNumbers = new Array(
+          byteCharacters.length
+        );
 
-      for (
-        let i = 0;
-        i < byteCharacters.length;
-        i++
-      ) {
-        byteNumbers[i] =
-          byteCharacters.charCodeAt(i);
-      }
-
-      const byteArray = new Uint8Array(
-        byteNumbers
-      );
-
-      const audioBlob = new Blob(
-        [byteArray],
-        {
-          type: "audio/mpeg",
+        for (
+          let i = 0;
+          i < byteCharacters.length;
+          i++
+        ) {
+          byteNumbers[i] =
+            byteCharacters.charCodeAt(i);
         }
+
+        const byteArray = new Uint8Array(
+          byteNumbers
+        );
+
+        const audioBlob = new Blob(
+          [byteArray],
+          {
+            type: "audio/mpeg",
+          }
+        );
+
+        const generatedAudioUrl =
+          URL.createObjectURL(audioBlob);
+
+        setAudioUrl(generatedAudioUrl);
+
+        return;
+      }
+
+      // ------------------------------------
+      // LOCAL NODE SERVER RESPONSE
+      // ------------------------------------
+
+      if (data.audioUrl) {
+        setAudioUrl(data.audioUrl);
+        return;
+      }
+
+      throw new Error(
+        "Audio was not returned by the server."
       );
-
-      const generatedAudioUrl =
-        URL.createObjectURL(audioBlob);
-
-      setAudioUrl(generatedAudioUrl);
 
     } catch (err) {
       console.error("TTS Error:", err);
@@ -114,6 +143,10 @@ function App() {
   // ------------------------------------
 
   const handleClear = () => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+
     setText("");
     setAudioUrl("");
     setError("");
@@ -436,7 +469,7 @@ function App() {
             Audio Download
           </div>
 
-        </div>s
+        </div>
 
         {/* FOOTER */}
         <footer>

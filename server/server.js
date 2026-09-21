@@ -7,168 +7,241 @@ const { execFile } = require("child_process");
 const app = express();
 const PORT = 5000;
 
+// ======================================
+// VOXIFY TEXT TO SPEECH SERVER
+// ======================================
+
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ------------------------------------
+// ======================================
 // AUDIO FOLDER
-// ------------------------------------
+// ======================================
 
-const audioFolder = path.join(__dirname, "audio");
+const audioDir = path.join(__dirname, "audio");
 
-if (!fs.existsSync(audioFolder)) {
-  fs.mkdirSync(audioFolder);
+if (!fs.existsSync(audioDir)) {
+  fs.mkdirSync(audioDir, { recursive: true });
 }
 
-// Make audio files accessible
-app.use("/audio", express.static(audioFolder));
+app.use("/audio", express.static(audioDir));
 
-// ------------------------------------
+// ======================================
 // LANGUAGE CONFIGURATION
-// ------------------------------------
+// ======================================
 
 const languageConfig = {
   "en-US": {
+    name: "English",
     male: "en-US-GuyNeural",
     female: "en-US-JennyNeural",
     target: "en",
   },
 
   "hi-IN": {
+    name: "Hindi",
     male: "hi-IN-MadhurNeural",
     female: "hi-IN-SwaraNeural",
     target: "hi",
   },
 
   "gu-IN": {
+    name: "Gujarati",
     male: "gu-IN-NiranjanNeural",
     female: "gu-IN-DhwaniNeural",
     target: "gu",
   },
 
   "mr-IN": {
+    name: "Marathi",
     male: "mr-IN-ManoharNeural",
     female: "mr-IN-AarohiNeural",
     target: "mr",
   },
 
   "es-ES": {
+    name: "Spanish",
     male: "es-ES-AlvaroNeural",
     female: "es-ES-ElviraNeural",
     target: "es",
   },
 
   "fr-FR": {
+    name: "French",
     male: "fr-FR-HenriNeural",
     female: "fr-FR-DeniseNeural",
     target: "fr",
   },
 
   "de-DE": {
+    name: "German",
     male: "de-DE-ConradNeural",
     female: "de-DE-KatjaNeural",
     target: "de",
   },
 };
 
-// ------------------------------------
-// HEALTH CHECK
-// ------------------------------------
-
-app.get("/api/health", (req, res) => {
-  res.json({
-    success: true,
-    message: "Text-to-Speech server is running",
-  });
-});
-
-// ------------------------------------
-// AVAILABLE VOICES
-// ------------------------------------
-
-app.get("/api/voices", (req, res) => {
-  res.json({
-    success: true,
-    voices: [
-      {
-        name: "Female Natural",
-        gender: "female",
-      },
-      {
-        name: "Male Natural",
-        gender: "male",
-      },
-    ],
-  });
-});
-
-// ------------------------------------
-// TRANSLATE TEXT
-// ------------------------------------
+// ======================================
+// TRANSLATION FUNCTION
+// ======================================
 
 async function translateText(text, targetLanguage) {
-  // English does not need translation
+  // English doesn't need translation
   if (targetLanguage === "en") {
     return text;
   }
 
-  const url =
-    "https://translate.googleapis.com/translate_a/single" +
-    `?client=gtx&sl=auto&tl=${targetLanguage}&dt=t&q=${encodeURIComponent(
-      text
-    )}`;
+  try {
+    console.log(`Translating text to: ${targetLanguage}`);
 
-  const response = await fetch(url);
+    const url =
+      "https://translate.googleapis.com/translate_a/single" +
+      `?client=gtx` +
+      `&sl=auto` +
+      `&tl=${targetLanguage}` +
+      `&dt=t` +
+      `&q=${encodeURIComponent(text)}`;
 
-  if (!response.ok) {
-    throw new Error("Translation service failed.");
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(
+        `Translation service returned status ${response.status}.`
+      );
+
+      console.warn("Using original text instead.");
+
+      return text;
+    }
+
+    const data = await response.json();
+
+    if (!Array.isArray(data) || !Array.isArray(data[0])) {
+      console.warn("Invalid translation response.");
+      console.warn("Using original text instead.");
+
+      return text;
+    }
+
+    const translatedText = data[0]
+      .map((item) => item?.[0])
+      .filter(Boolean)
+      .join("");
+
+    if (!translatedText) {
+      console.warn("Translation returned empty text.");
+      console.warn("Using original text instead.");
+
+      return text;
+    }
+
+    console.log("Translation completed successfully.");
+
+    return translatedText;
+  } catch (error) {
+    console.warn("Translation failed:", error.message);
+    console.warn("Using original text instead.");
+
+    return text;
   }
-
-  const data = await response.json();
-
-  if (!Array.isArray(data) || !Array.isArray(data[0])) {
-    throw new Error("Invalid translation response.");
-  }
-
-  return data[0]
-    .map((item) => item[0])
-    .filter(Boolean)
-    .join("");
 }
 
-// ------------------------------------
-// TEXT TO SPEECH
-// ------------------------------------
+// ======================================
+// HEALTH API
+// ======================================
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    message: "Voxify API is running",
+    server: "Node.js + Express",
+    ttsEngine: "Microsoft Edge Neural TTS",
+    translation: "Google Translate",
+  });
+});
+
+// ======================================
+// VOICES API
+// ======================================
+
+app.get("/api/voices", (req, res) => {
+  const voices = [];
+
+  Object.entries(languageConfig).forEach(
+    ([languageCode, config]) => {
+      voices.push({
+        language: languageCode,
+        languageName: config.name,
+        gender: "male",
+        voice: config.male,
+      });
+
+      voices.push({
+        language: languageCode,
+        languageName: config.name,
+        gender: "female",
+        voice: config.female,
+      });
+    }
+  );
+
+  res.json({
+    success: true,
+    voices,
+  });
+});
+
+// ======================================
+// TEXT TO SPEECH API
+// ======================================
 
 app.post("/api/tts", async (req, res) => {
   try {
     const { text, language, voice } = req.body;
 
-    // --------------------------------
-    // VALIDATE TEXT
-    // --------------------------------
+    console.log("\n======================================");
+    console.log("TTS REQUEST");
+    console.log("======================================");
 
-    if (!text || !text.trim()) {
+    console.log("Language:", language);
+    console.log("Voice:", voice);
+    console.log("Characters:", text ? text.length : 0);
+
+    // ==================================
+    // VALIDATE TEXT
+    // ==================================
+
+    if (!text || typeof text !== "string") {
       return res.status(400).json({
         success: false,
         message: "Text is required.",
       });
     }
 
-    // --------------------------------
-    // VALIDATE LENGTH
-    // --------------------------------
+    const cleanText = text.trim();
 
-    if (text.length > 5000) {
+    if (!cleanText) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter some text.",
+      });
+    }
+
+    if (cleanText.length > 5000) {
       return res.status(400).json({
         success: false,
         message: "Text cannot exceed 5000 characters.",
       });
     }
 
-    // --------------------------------
+    // ==================================
     // VALIDATE LANGUAGE
-    // --------------------------------
+    // ==================================
 
     if (!languageConfig[language]) {
       return res.status(400).json({
@@ -177,56 +250,65 @@ app.post("/api/tts", async (req, res) => {
       });
     }
 
-    // --------------------------------
-    // VALIDATE VOICE
-    // --------------------------------
-
-    if (!["male", "female"].includes(voice)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid voice.",
-      });
-    }
+    // ==================================
+    // GET LANGUAGE CONFIG
+    // ==================================
 
     const config = languageConfig[language];
 
-    const selectedVoice = config[voice];
+    // ==================================
+    // DETERMINE VOICE
+    // ==================================
 
-    console.log("");
-    console.log("--------------------------------");
-    console.log("TTS REQUEST");
-    console.log("--------------------------------");
-    console.log("Language:", language);
-    console.log("Gender:", voice);
-    console.log("Voice:", selectedVoice);
-    console.log("Characters:", text.length);
-    console.log("--------------------------------");
+    let selectedVoice;
 
-    // --------------------------------
-    // TRANSLATE TEXT
-    // --------------------------------
+    if (voice === "male") {
+      selectedVoice = config.male;
+    } else if (voice === "female") {
+      selectedVoice = config.female;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Voice must be male or female.",
+      });
+    }
+
+    console.log("Selected Edge voice:", selectedVoice);
+
+    // ==================================
+    // TRANSLATION
+    // ==================================
 
     console.log("Translating text...");
 
-    const translatedText = await translateText(text, config.target);
+    const translatedText = await translateText(
+      cleanText,
+      config.target
+    );
 
-    console.log("Translation completed.");
-    console.log("Translated text:", translatedText);
+    console.log("Text for TTS:", translatedText);
 
-    // --------------------------------
-    // UNIQUE MP3 FILE
-    // --------------------------------
+    // ==================================
+    // CREATE UNIQUE FILE NAME
+    // ==================================
+
+    const timestamp = Date.now();
+
+    const randomNumber = Math.floor(
+      Math.random() * 100000
+    );
 
     const filename =
-      `speech-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 8)}.mp3`;
+      `speech-${timestamp}-${randomNumber}.mp3`;
 
-    const outputPath = path.join(audioFolder, filename);
+    const outputPath = path.join(
+      audioDir,
+      filename
+    );
 
-    // --------------------------------
-    // EDGE TTS
-    // --------------------------------
+    // ==================================
+    // GENERATE SPEECH
+    // ==================================
 
     console.log("Generating speech with Edge TTS...");
 
@@ -244,70 +326,167 @@ app.post("/api/tts", async (req, res) => {
       ],
       (error, stdout, stderr) => {
         if (error) {
-          console.error("Edge TTS Error:");
-          console.error(stderr || error.message);
+          console.error(
+            "Edge TTS Error:",
+            error
+          );
+
+          console.error(
+            "STDERR:",
+            stderr
+          );
 
           return res.status(500).json({
             success: false,
-            message: "Unable to generate speech with Edge TTS.",
+            message:
+              "Failed to generate speech.",
+            error: error.message,
           });
         }
 
-        // --------------------------------
+        // ==================================
         // CHECK AUDIO FILE
-        // --------------------------------
+        // ==================================
 
         if (!fs.existsSync(outputPath)) {
+          console.error(
+            "Audio file was not created."
+          );
+
           return res.status(500).json({
             success: false,
-            message: "Audio file was not generated.",
+            message:
+              "Audio file was not generated.",
           });
         }
+
+        const stats =
+          fs.statSync(outputPath);
+
+        console.log(
+          "Audio size:",
+          stats.size,
+          "bytes"
+        );
+
+        if (stats.size === 0) {
+          console.error(
+            "Generated audio file is empty."
+          );
+
+          return res.status(500).json({
+            success: false,
+            message:
+              "Generated audio file is empty.",
+          });
+        }
+
+        // ==================================
+        // AUDIO URL
+        // ==================================
 
         const audioUrl =
           `http://localhost:${PORT}/audio/${filename}`;
 
-        console.log("Audio generated successfully.");
-        console.log("Voice:", selectedVoice);
-        console.log("File:", filename);
+        console.log(
+          "Audio generated successfully."
+        );
 
-        // --------------------------------
+        console.log(
+          "Audio URL:",
+          audioUrl
+        );
+
+        console.log(
+          "======================================\n"
+        );
+
+        // ==================================
         // RESPONSE
-        // --------------------------------
+        // ==================================
 
-        res.json({
+        return res.json({
           success: true,
-          message: "Speech generated successfully.",
+          message:
+            "Speech generated successfully.",
+
           audioUrl,
-          voice,
+
+          filename,
+
           language,
-          originalText: text,
+
+          languageName:
+            config.name,
+
+          voice: selectedVoice,
+
+          gender: voice,
+
+          originalText: cleanText,
+
           translatedText,
         });
       }
     );
   } catch (error) {
-    console.error("Server Error:", error);
+    console.error(
+      "Server Error:",
+      error
+    );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Unable to generate speech.",
+      message:
+        "Unable to generate speech.",
+      error: error.message,
     });
   }
 });
 
-// ------------------------------------
+// ======================================
+// 404 API
+// ======================================
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "API endpoint not found.",
+  });
+});
+
+// ======================================
+// GLOBAL ERROR HANDLER
+// ======================================
+
+app.use((error, req, res, next) => {
+  console.error(
+    "Global Error:",
+    error
+  );
+
+  res.status(500).json({
+    success: false,
+    message: "Internal server error.",
+  });
+});
+
+// ======================================
 // START SERVER
-// ------------------------------------
+// ======================================
 
 app.listen(PORT, () => {
-  console.log("");
-  console.log("======================================");
+  console.log("\n======================================");
   console.log("       VOXIFY TEXT TO SPEECH");
   console.log("======================================");
-  console.log(`Server: http://localhost:${PORT}`);
-  console.log("Engine: Microsoft Edge Neural TTS");
-  console.log("Translation: Google Translate");
-  console.log("======================================");
-  console.log("");
+  console.log(
+    `Server: http://localhost:${PORT}`
+  );
+  console.log(
+    "Engine: Microsoft Edge Neural TTS"
+  );
+  console.log(
+    "Translation: Google Translate"
+  );
+  console.log("======================================\n");
 });
