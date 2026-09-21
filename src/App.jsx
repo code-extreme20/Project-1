@@ -36,7 +36,7 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:5000/api/tts", {
+      const response = await fetch("/api/tts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -56,11 +56,47 @@ function App() {
         );
       }
 
-      if (!data.audioUrl) {
-        throw new Error("Audio URL was not returned by the server.");
+      if (!data.audioBase64) {
+        throw new Error(
+          "Audio was not returned by the server."
+        );
       }
 
-      setAudioUrl(data.audioUrl);
+      // ------------------------------------
+      // BASE64 → MP3 BLOB
+      // ------------------------------------
+
+      const byteCharacters = atob(data.audioBase64);
+
+      const byteNumbers = new Array(
+        byteCharacters.length
+      );
+
+      for (
+        let i = 0;
+        i < byteCharacters.length;
+        i++
+      ) {
+        byteNumbers[i] =
+          byteCharacters.charCodeAt(i);
+      }
+
+      const byteArray = new Uint8Array(
+        byteNumbers
+      );
+
+      const audioBlob = new Blob(
+        [byteArray],
+        {
+          type: "audio/mpeg",
+        }
+      );
+
+      const generatedAudioUrl =
+        URL.createObjectURL(audioBlob);
+
+      setAudioUrl(generatedAudioUrl);
+
     } catch (err) {
       console.error("TTS Error:", err);
 
@@ -134,8 +170,9 @@ function App() {
           </h1>
 
           <p>
-            Transform written text into clear, natural-sounding
-            speech with a simple and powerful voice studio.
+            Transform written text into clear,
+            natural-sounding speech with a simple
+            and powerful voice studio.
           </p>
 
         </section>
@@ -157,6 +194,7 @@ function App() {
             </div>
 
             <div className="character-count">
+
               <strong>
                 {text.length}
               </strong>
@@ -165,6 +203,7 @@ function App() {
                 {" "}
                 / {maxCharacters}
               </span>
+
             </div>
 
           </div>
@@ -174,7 +213,9 @@ function App() {
 
             <textarea
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) =>
+                setText(e.target.value)
+              }
               maxLength={maxCharacters}
               placeholder="Start typing or paste your text here..."
             />
@@ -395,7 +436,7 @@ function App() {
             Audio Download
           </div>
 
-        </div>
+        </div>s
 
         {/* FOOTER */}
         <footer>
