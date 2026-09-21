@@ -15,12 +15,21 @@ function App() {
     ? text.trim().split(/\s+/).length
     : 0;
 
+  // ------------------------------------
+  // GENERATE SPEECH
+  // ------------------------------------
+
   const handleGenerate = async () => {
     setError("");
     setAudioUrl("");
 
     if (!text.trim()) {
       setError("Please enter some text first.");
+      return;
+    }
+
+    if (text.length > maxCharacters) {
+      setError(`Text cannot exceed ${maxCharacters} characters.`);
       return;
     }
 
@@ -33,7 +42,7 @@ function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          text,
+          text: text.trim(),
           language,
           voice,
         }),
@@ -42,16 +51,31 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to generate speech.");
+        throw new Error(
+          data.message || "Failed to generate speech."
+        );
+      }
+
+      if (!data.audioUrl) {
+        throw new Error("Audio URL was not returned by the server.");
       }
 
       setAudioUrl(data.audioUrl);
     } catch (err) {
-      setError(err.message || "Something went wrong.");
+      console.error("TTS Error:", err);
+
+      setError(
+        err.message ||
+          "Unable to generate speech. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
   };
+
+  // ------------------------------------
+  // CLEAR
+  // ------------------------------------
 
   const handleClear = () => {
     setText("");
@@ -62,6 +86,7 @@ function App() {
   return (
     <div className="app">
 
+      {/* BACKGROUND GLOW */}
       <div className="background-glow glow-one"></div>
       <div className="background-glow glow-two"></div>
 
@@ -69,19 +94,30 @@ function App() {
 
         {/* NAVBAR */}
         <nav className="navbar">
+
           <div className="brand">
-            <div className="brand-icon">✦</div>
+
+            <div className="brand-icon">
+              ✦
+            </div>
 
             <div>
-              <div className="brand-name">Voxify</div>
-              <div className="brand-subtitle">TEXT TO SPEECH</div>
+              <div className="brand-name">
+                Voxify
+              </div>
+
+              <div className="brand-subtitle">
+                TEXT TO SPEECH
+              </div>
             </div>
+
           </div>
 
           <div className="status">
             <span className="status-dot"></span>
             AI Voice Studio
           </div>
+
         </nav>
 
         {/* HERO */}
@@ -98,8 +134,8 @@ function App() {
           </h1>
 
           <p>
-            Transform written text into clear, natural-sounding speech
-            with a simple and powerful voice studio.
+            Transform written text into clear, natural-sounding
+            speech with a simple and powerful voice studio.
           </p>
 
         </section>
@@ -107,16 +143,28 @@ function App() {
         {/* MAIN CARD */}
         <main className="studio-card">
 
+          {/* CARD HEADER */}
           <div className="card-top">
 
             <div>
-              <p className="eyebrow">VOICE STUDIO</p>
-              <h2>Create your audio</h2>
+              <p className="eyebrow">
+                VOICE STUDIO
+              </p>
+
+              <h2>
+                Create your audio
+              </h2>
             </div>
 
             <div className="character-count">
-              <strong>{text.length}</strong>
-              <span> / {maxCharacters}</span>
+              <strong>
+                {text.length}
+              </strong>
+
+              <span>
+                {" "}
+                / {maxCharacters}
+              </span>
             </div>
 
           </div>
@@ -149,41 +197,82 @@ function App() {
           {/* CONTROLS */}
           <div className="controls">
 
+            {/* LANGUAGE */}
             <div className="control">
 
               <label>
-                <span className="control-icon">文</span>
+                <span className="control-icon">
+                  文
+                </span>
+
                 Language
               </label>
 
               <select
                 value={language}
-                onChange={(e) => setLanguage(e.target.value)}
+                onChange={(e) =>
+                  setLanguage(e.target.value)
+                }
               >
-                <option value="en-US">English — US</option>
-                <option value="hi-IN">Hindi — India</option>
-                <option value="gu-IN">Gujarati — India</option>
-                <option value="mr-IN">Marathi — India</option>
-                <option value="es-ES">Spanish</option>
-                <option value="fr-FR">French</option>
-                <option value="de-DE">German</option>
+
+                <option value="en-US">
+                  English — US
+                </option>
+
+                <option value="hi-IN">
+                  Hindi — India
+                </option>
+
+                <option value="gu-IN">
+                  Gujarati — India
+                </option>
+
+                <option value="mr-IN">
+                  Marathi — India
+                </option>
+
+                <option value="es-ES">
+                  Spanish
+                </option>
+
+                <option value="fr-FR">
+                  French
+                </option>
+
+                <option value="de-DE">
+                  German
+                </option>
+
               </select>
 
             </div>
 
+            {/* VOICE */}
             <div className="control">
 
               <label>
-                <span className="control-icon">◉</span>
+                <span className="control-icon">
+                  ◉
+                </span>
+
                 Voice
               </label>
 
               <select
                 value={voice}
-                onChange={(e) => setVoice(e.target.value)}
+                onChange={(e) =>
+                  setVoice(e.target.value)
+                }
               >
-                <option value="female">Female — Natural</option>
-                <option value="male">Male — Natural</option>
+
+                <option value="female">
+                  Female — Natural
+                </option>
+
+                <option value="male">
+                  Male — Natural
+                </option>
+
               </select>
 
             </div>
@@ -193,8 +282,13 @@ function App() {
           {/* ERROR */}
           {error && (
             <div className="error-box">
-              <span>!</span>
+
+              <span>
+                !
+              </span>
+
               {error}
+
             </div>
           )}
 
@@ -206,6 +300,7 @@ function App() {
               onClick={handleGenerate}
               disabled={isLoading}
             >
+
               {isLoading ? (
                 <>
                   <span className="spinner"></span>
@@ -214,21 +309,25 @@ function App() {
               ) : (
                 <>
                   Generate Speech
-                  <span className="arrow">→</span>
+                  <span className="arrow">
+                    →
+                  </span>
                 </>
               )}
+
             </button>
 
             <button
               className="clear-button"
               onClick={handleClear}
+              disabled={isLoading}
             >
               Clear
             </button>
 
           </div>
 
-          {/* AUDIO */}
+          {/* AUDIO RESULT */}
           {audioUrl && (
             <div className="audio-result">
 
@@ -239,18 +338,31 @@ function App() {
                 </div>
 
                 <div>
-                  <p>YOUR AUDIO</p>
-                  <h3>Speech generated successfully</h3>
+                  <p>
+                    YOUR AUDIO
+                  </p>
+
+                  <h3>
+                    Speech generated successfully
+                  </h3>
                 </div>
 
               </div>
 
-              <audio controls src={audioUrl}></audio>
+              {/* AUDIO PLAYER */}
+              <audio
+                controls
+                src={audioUrl}
+              >
+                Your browser does not support
+                the audio element.
+              </audio>
 
+              {/* DOWNLOAD */}
               <a
-              href={audioUrl}
-              download="generated-speech.wav"
-              className="download-button"
+                href={audioUrl}
+                download="generated-speech.mp3"
+                className="download-button"
               >
                 ↓ Download Audio
               </a>
@@ -285,6 +397,7 @@ function App() {
 
         </div>
 
+        {/* FOOTER */}
         <footer>
           Built with React + Node.js + Express
         </footer>
